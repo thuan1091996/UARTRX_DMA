@@ -26,8 +26,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <string.h>
-#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,28 +43,22 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+/* USER CODE BEGIN PV */
 extern DMA_HandleTypeDef hdma_usart1_rx;
 extern UART_HandleTypeDef huart1;
 
-#define BUFFER_SIZE							50
-uint8_t buffer_msg[BUFFER_SIZE]={0};
-uint8_t buffer_len;
-
-#define RECV_MAX							50
-uint8_t buffer_recv[RECV_MAX]={0};
-uint8_t irq_source=0;
-/* USER CODE BEGIN PV */
-
+bool g_dmaoverflow=false;
+uint8_t g_txbuffer[TXBUFFER_SIZE]={0};
+uint8_t g_txbuffer_len=0;
+uint8_t g_rxdmabuffer[RXDMABUFFER_SIZE]={0};
+uint8_t g_rxbuffer[RXBUFFER_SIZE]={0};
+volatile bool g_newdata=false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void DMACallbacks(DMA_HandleTypeDef *_hdma)
-{
-	UNUSED(_hdma);
-	HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-}
+void UART_RTOInit(uint16_t ui16timeout);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -106,6 +98,21 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USB_PCD_Init();
   /* USER CODE BEGIN 2 */
+  #if UART_RTO_IT
+  uint16_t uart_timeout = 1;
+  UART_RTOInit(uart_timeout);
+  #endif
+
+  #if UART_IDLE_IT
+  //Enable UART IDLE interrupt
+  __HAL_UART_ENABLE_IT(&huart1,UART_IT_IDLE);
+  #endif
+
+  //Starting message
+  g_txbuffer_len = sprintf((char*)g_txbuffer, "Test started\n");
+  HAL_UART_Transmit(&huart1, g_txbuffer, g_txbuffer_len, 10);
+
+  HAL_UART_Receive_DMA(&huart1, g_rxdmabuffer, RXDMABUFFER_SIZE);
 
   /* USER CODE END 2 */
 
@@ -113,8 +120,19 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-	  HAL_Delay(100);
+	  if(g_newdata == true)	//Set when RTO event occurred and new data in DMA buffer
+	  {
+		  if(strstr((char*)g_rxbuffer, "\r\n") != NULL ) //received new frame
+		  {
+			  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+			  #if !UART_IDLE_IT //Since TX will prevent IDLE interrupt
+			  HAL_UART_Transmit(&huart1, g_rxbuffer, strlen((char*)g_rxbuffer), 10);
+			  #endif
+		  }
+		  memset(g_rxbuffer, 0, strlen((char*)g_rxbuffer));
+		  g_newdata=false;
+	  }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -204,7 +222,57 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void UART_RTOInit(uint16_t ui16timeout)
+{
+	HAL_UART_ReceiverTimeout_Config(&huart1, (huart1.Init.BaudRate/1000)*ui16timeout); //In ms
+	HAL_UART_EnableReceiverTimeout(&huart1);
+	__HAL_UART_ENABLE_IT(&huart1,UART_IT_RTO);
+}
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+
+	if(huart == &huart1)
+	{
+		if(g_dmaoverflow == false)  g_dmaoverflow = true;
+		else
+		{
+			g_txbuffer_len = sprintf((char*)g_txbuffer, "Overflow DMA\n");
+			HAL_UART_Transmit(&huart1, g_txbuffer, g_txbuffer_len, 10);
+		}
+	}
+}
+
+void UART_GetData(uint8_t* pui8buffer)
+{
+	static uint32_t old_pos=0;
+	uint32_t pos=0;
+	/* Calculate current position in buffer */
+	pos = RXDMABUFFER_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_CHANNEL_1);
+	if (pos != old_pos)		/* Check change in received data */
+	{
+		if (pos > old_pos)	/* Current position is over previous one */
+		{
+			/* We are in "linear" mode */
+			/* Process data directly by subtracting "pointers" */
+			memcpy(pui8buffer, &g_rxdmabuffer[old_pos], pos - old_pos);
+		}
+		else
+		{
+			/* We are in "overflow" mode */
+			/* First process data to the end of buffer */
+			memcpy(pui8buffer, &g_rxdmabuffer[old_pos], RXDMABUFFER_SIZE - old_pos);
+			/* Check and continue with beginning of buffer */
+			if (pos > 0)
+			{
+				memcpy((pui8buffer+(RXDMABUFFER_SIZE - old_pos)), &g_rxdmabuffer[0], pos);
+			}
+		}
+		g_newdata = true;
+	}
+	old_pos = pos;	/* Save current position as old */
+	g_dmaoverflow = false;	/* Make sure that data never overflow twice */
+}
 /* USER CODE END 4 */
 
 /**

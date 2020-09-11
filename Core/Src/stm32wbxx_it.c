@@ -23,6 +23,7 @@
 #include "stm32wbxx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -218,11 +219,26 @@ void DMA1_Channel1_IRQHandler(void)
 void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
+	#if UART_RTO_IT
+	if( (__HAL_UART_GET_IT_SOURCE(&huart1, UART_IT_RTO) == SET) &&		//RTO interrupt is enable
+		(__HAL_UART_GET_IT(&huart1, UART_IT_RTO) == SET))				//RTO interrupt occurred
+	{
+		UART_GetData(g_rxbuffer);
+		__HAL_UART_CLEAR_FLAG(&huart1, UART_CLEAR_RTOF);
+	}
+	#endif
 
+	#if UART_IDLE_IT
+	if( (__HAL_UART_GET_IT_SOURCE(&huart1, UART_IT_IDLE) == SET) &&		//IDLE interrupt is enable
+		(__HAL_UART_GET_IT(&huart1, UART_IT_IDLE) == SET))				//IDLE interrupt occurred
+	{
+		UART_GetData(g_rxbuffer);
+		__HAL_UART_CLEAR_FLAG(&huart1,UART_CLEAR_IDLEF);
+	}
+	#endif
   /* USER CODE END USART1_IRQn 0 */
-  HAL_UART_IRQHandler(&huart1);
+	HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
-
   /* USER CODE END USART1_IRQn 1 */
 }
 

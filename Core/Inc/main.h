@@ -32,7 +32,9 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -54,7 +56,7 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-
+void UART_GetData(uint8_t* pui8buffer);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
@@ -81,7 +83,14 @@ void Error_Handler(void);
 #define STLINK_TX_Pin GPIO_PIN_7
 #define STLINK_TX_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
-
+#define UART_RTO_IT								1
+#define UART_IDLE_IT							0
+#define TXBUFFER_SIZE							50
+#define RXBUFFER_SIZE							100
+#define RXDMABUFFER_SIZE						100
+extern uint8_t g_rxbuffer[RXBUFFER_SIZE];
+extern uint8_t g_rxdmabuffer[RXDMABUFFER_SIZE];
+extern volatile bool g_newdata;
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
