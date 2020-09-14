@@ -219,6 +219,7 @@ void DMA1_Channel1_IRQHandler(void)
 void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
+	HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
 	#if UART_RTO_IT
 	if( (__HAL_UART_GET_IT_SOURCE(&huart1, UART_IT_RTO) == SET) &&		//RTO interrupt is enable
 		(__HAL_UART_GET_IT(&huart1, UART_IT_RTO) == SET))				//RTO interrupt occurred

@@ -124,10 +124,7 @@ int main(void)
 	  {
 		  if(strstr((char*)g_rxbuffer, "\r\n") != NULL ) //received new frame
 		  {
-			  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-			  #if !UART_IDLE_IT //Since TX will prevent IDLE interrupt
 			  HAL_UART_Transmit(&huart1, g_rxbuffer, strlen((char*)g_rxbuffer), 10);
-			  #endif
 		  }
 		  memset(g_rxbuffer, 0, strlen((char*)g_rxbuffer));
 		  g_newdata=false;
