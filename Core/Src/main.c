@@ -35,6 +35,31 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define PWM_MAX				100
+#define PWM_MIN				0
+
+#ifdef __GNUC__
+  /* With GCC/RAISONANCE, small printf (option LD Linker->Libraries->Small printf
+     set to 'Yes') calls __io_putchar() */
+  #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#else
+  #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#endif /* __GNUC__ */
+
+/**
+  * @brief  Retargets the C library printf function to the USART.
+  * @param  None
+  * @retval None
+  */
+PUTCHAR_PROTOTYPE
+{
+    /* Place your implementation of fputc here */
+    /* e.g. write a character to the USART */
+    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 100);
+
+
+    return ch;
+}
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -59,6 +84,7 @@ volatile bool g_newdata=false;
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 void UART_RTOInit(uint16_t ui16timeout);
+uint8_t ConvertData(uint8_t* buff);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -120,11 +146,21 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  uint8_t pwm_data=0;
 	  if(g_newdata == true)	//Set when RTO event occurred and new data in DMA buffer
 	  {
 		  if(strstr((char*)g_rxbuffer, "\r\n") != NULL ) //received new frame
 		  {
 			  HAL_UART_Transmit(&huart1, g_rxbuffer, strlen((char*)g_rxbuffer), 10);
+			  pwm_data = ConvertData(g_rxbuffer);
+			  if( (pwm_data > PWM_MIN) && (pwm_data< PWM_MAX))
+			  {
+				  printf("Value %d \n", pwm_data);
+			  }
+			  else
+			  {
+				  printf("Cuoc song ma\n");
+			  }
 		  }
 		  memset(g_rxbuffer, 0, strlen((char*)g_rxbuffer));
 		  g_newdata=false;
@@ -219,6 +255,35 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/* ----------Convert_2Numb(char char_in)-----------------
+ * Operating: Convert character to number
+ * Input:  character want to convert to number
+ * Output: corresponding number
+ * '0' - '9' -> 0 - 9
+ * 'A' - 'F' -> 0x0A - 0x0F
+-------------------------------------------------------*/
+uint8_t  Convert_2Numb(char char_in){
+    uint8_t numb_out;
+    if(char_in<'A')  numb_out=char_in-0x30; //'0-9' return 0-9
+    else             numb_out=char_in-55;   //'A'-'F' return 0x0A-0x0F
+    return numb_out;
+}
+
+
+uint8_t ConvertData(uint8_t* buff)
+{
+	uint8_t dvi,chuc,tram;
+	uint8_t ret=255;
+	tram = Convert_2Numb(buff[0]);
+	if(tram>1) return ret;
+	chuc = Convert_2Numb(buff[1]);
+	dvi  = Convert_2Numb(buff[2]);
+	ret = tram*100 +chuc*10 + dvi;
+	return ret;
+}
+
+
 void UART_RTOInit(uint16_t ui16timeout)
 {
 	HAL_UART_ReceiverTimeout_Config(&huart1, (huart1.Init.BaudRate/1000)*ui16timeout); //In ms
