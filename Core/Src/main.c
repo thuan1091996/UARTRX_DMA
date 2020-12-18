@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
+#include "tim.h"
 #include "usart.h"
 #include "usb.h"
 #include "gpio.h"
@@ -46,6 +47,8 @@
   #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
 #endif /* __GNUC__ */
 
+#define CONFIG_U			1
+#define CONFIG_I			2
 /**
   * @brief  Retargets the C library printf function to the USART.
   * @param  None
@@ -68,6 +71,7 @@ PUTCHAR_PROTOTYPE
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+
 /* USER CODE BEGIN PV */
 extern DMA_HandleTypeDef hdma_usart1_rx;
 extern UART_HandleTypeDef huart1;
@@ -77,6 +81,8 @@ uint8_t g_txbuffer[TXBUFFER_SIZE]={0};
 uint8_t g_txbuffer_len=0;
 uint8_t g_rxdmabuffer[RXDMABUFFER_SIZE]={0};
 uint8_t g_rxbuffer[RXBUFFER_SIZE]={0};
+uint8_t g_pwm_data=0;
+uint8_t	g_configdata=0;
 volatile bool g_newdata=false;
 /* USER CODE END PV */
 
@@ -123,6 +129,8 @@ int main(void)
   MX_DMA_Init();
   MX_USART1_UART_Init();
   MX_USB_PCD_Init();
+  MX_TIM16_Init();
+  MX_TIM17_Init();
   /* USER CODE BEGIN 2 */
   #if UART_RTO_IT
   uint16_t uart_timeout = 1;
@@ -134,6 +142,10 @@ int main(void)
   __HAL_UART_ENABLE_IT(&huart1,UART_IT_IDLE);
   #endif
 
+  HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
+  HAL_TIM_Base_Start_IT(&htim16);
+  HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1);
+  HAL_TIM_Base_Start_IT(&htim17);
   //Starting message
   g_txbuffer_len = sprintf((char*)g_txbuffer, "Test started\n");
   HAL_UART_Transmit(&huart1, g_txbuffer, g_txbuffer_len, 10);
@@ -146,21 +158,54 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  uint8_t pwm_data=0;
-	  if(g_newdata == true)	//Set when RTO event occurred and new data in DMA buffer
+	  if(g_newdata == true)	//Set when RTO/RX IDLE event occurred AND there are new data in DMA buffer
 	  {
-		  if(strstr((char*)g_rxbuffer, "\r\n") != NULL ) //received new frame
+		  if(strstr((char*)g_rxbuffer, "\r\n") != NULL ) /* received new frame */
 		  {
-			  HAL_UART_Transmit(&huart1, g_rxbuffer, strlen((char*)g_rxbuffer), 10);
-			  pwm_data = ConvertData(g_rxbuffer);
-			  if( (pwm_data > PWM_MIN) && (pwm_data< PWM_MAX))
+			  #if ECHO_RECVDATA
+			  printf("Echo received data: ");
+			  HAL_UART_Transmit(&huart1, g_rxbuffer, strlen((char*)g_rxbuffer), 10); /* Echo data */
+			  #endif /*End of ECHO_RECVDATA*/
+			  g_pwm_data = ConvertData(g_rxbuffer);
+			  if(g_configdata == CONFIG_U)	/* Configure PWM U */
 			  {
-				  printf("Value %d \n", pwm_data);
+				  if( (g_pwm_data > PWM_MIN) && (g_pwm_data <= PWM_MAX))
+				  {
+					  uint16_t ui16reload = ((g_pwm_data * 3200) / 100) -1;
+					  __HAL_TIM_SET_COMPARE(&htim16, TIM_CHANNEL_1, ui16reload);
+					  printf("Configure U PWM: ");
+					  printf("Duty %d \n", g_pwm_data);
+				  }
+				  else if (g_pwm_data == 0)
+				  {
+					  printf("Configure U PWM: Duty 0\n");
+					  __HAL_TIM_SET_COMPARE(&htim16, TIM_CHANNEL_1, 0);
+				  }
+				  else
+				  {
+					  printf("Cuoc song ma\n");
+				  }
 			  }
-			  else
+			  else if (g_configdata == CONFIG_I) 					/* Configure PWM I */
 			  {
-				  printf("Cuoc song ma\n");
+				  if( (g_pwm_data > PWM_MIN) && (g_pwm_data <= PWM_MAX))
+				  {
+					  uint16_t ui16reload = ((g_pwm_data * 3200) / 100) -1;
+					  __HAL_TIM_SET_COMPARE(&htim17, TIM_CHANNEL_1, ui16reload);
+				  	  printf("Configure I PWM: ");
+					  printf("Duty %d \n", g_pwm_data);
+				  }
+				  else if (g_pwm_data == 0)
+				  {
+					  printf("Configure I PWM: Duty 0\n");
+					  __HAL_TIM_SET_COMPARE(&htim17, TIM_CHANNEL_1, 0);
+				  }
+				  else
+				  {
+					  printf("Cuoc song ma\n");
+				  }
 			  }
+			  else printf("Doi ma \n");
 		  }
 		  memset(g_rxbuffer, 0, strlen((char*)g_rxbuffer));
 		  g_newdata=false;
@@ -273,16 +318,18 @@ uint8_t  Convert_2Numb(char char_in){
 
 uint8_t ConvertData(uint8_t* buff)
 {
-	uint8_t dvi,chuc,tram;
+	uint8_t digit,tenth,hunderd;
 	uint8_t ret=255;
-	tram = Convert_2Numb(buff[0]);
-	if(tram>1) return ret;
-	chuc = Convert_2Numb(buff[1]);
-	dvi  = Convert_2Numb(buff[2]);
-	ret = tram*100 +chuc*10 + dvi;
+	if		( (buff[0] == 'u') || (buff[0] == 'U') )	g_configdata = CONFIG_U;
+	else if ( (buff[0] == 'i') || (buff[0] == 'I') )	g_configdata = CONFIG_I;
+	else {g_configdata = 0; return ret;}
+	hunderd = Convert_2Numb(buff[1]);
+	if(hunderd > 1) return ret;								/* Invalid data */
+	tenth = Convert_2Numb(buff[2]);
+	digit  = Convert_2Numb(buff[3]);
+	ret = hunderd*100 +tenth*10 + digit;
 	return ret;
 }
-
 
 void UART_RTOInit(uint16_t ui16timeout)
 {

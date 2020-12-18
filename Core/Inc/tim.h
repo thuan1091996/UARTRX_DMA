@@ -1,8 +1,8 @@
 /**
   ******************************************************************************
-  * File Name          : dma.c
+  * File Name          : TIM.h
   * Description        : This file provides code for the configuration
-  *                      of all the requested memory to memory DMA transfers.
+  *                      of the TIM instances.
   ******************************************************************************
   * @attention
   *
@@ -16,42 +16,40 @@
   *
   ******************************************************************************
   */
+/* Define to prevent recursive inclusion -------------------------------------*/
+#ifndef __tim_H
+#define __tim_H
+#ifdef __cplusplus
+ extern "C" {
+#endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "dma.h"
+#include "main.h"
 
-/* USER CODE BEGIN 0 */
+/* USER CODE BEGIN Includes */
 
-/* USER CODE END 0 */
+/* USER CODE END Includes */
 
-/*----------------------------------------------------------------------------*/
-/* Configure DMA                                                              */
-/*----------------------------------------------------------------------------*/
+extern TIM_HandleTypeDef htim16;
+extern TIM_HandleTypeDef htim17;
 
-/* USER CODE BEGIN 1 */
+/* USER CODE BEGIN Private defines */
 
-/* USER CODE END 1 */
+/* USER CODE END Private defines */
 
-/**
-  * Enable DMA controller clock
-  */
-void MX_DMA_Init(void)
-{
+void MX_TIM16_Init(void);
+void MX_TIM17_Init(void);
 
-  /* DMA controller clock enable */
-  __HAL_RCC_DMAMUX1_CLK_ENABLE();
-  __HAL_RCC_DMA1_CLK_ENABLE();
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
-  /* DMA interrupt init */
-  /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+/* USER CODE BEGIN Prototypes */
 
+/* USER CODE END Prototypes */
+
+#ifdef __cplusplus
 }
-
-/* USER CODE BEGIN 2 */
-
-/* USER CODE END 2 */
+#endif
+#endif /*__ tim_H */
 
 /**
   * @}
